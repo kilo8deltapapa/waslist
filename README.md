@@ -31,7 +31,7 @@ Information about ARRL Worked All States Award can be found here: http://www.arr
 - https://pypi.org/project/adif-io/
 - https://pypi.org/project/pyhamtools/
 
-usa_states.txt and ca_provinces.txt must be co-located in the same folder with the .exe or .py file.
+usa_states.txt and ve_provinces.txt must be co-located in the same folder with the .exe or .py file.
 
 ## Installation
 
