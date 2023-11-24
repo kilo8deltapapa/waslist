@@ -23,7 +23,7 @@ Rick Murphy K1MU found at URL: https://www.rickmurphy.net/lotwquery.htm
 Author: Douglas C. Papay K8DP
 Date Created: November 23, 2023
 Date Modified: November 24, 2023
-Version: 0.3
+Version: 1.0
 Python Version: 3.10.5
 Dependencies: argparse,adif-io,pyhamtools
 License: MIT License
@@ -36,7 +36,7 @@ import argparse
 import adif_io
 from pyhamtools.locator import calculate_distance
 
-VERSION = 0.3
+VERSION = 1.0
 
 # Initialize parser
 parser = argparse.ArgumentParser()
@@ -105,6 +105,8 @@ with open("usa_states.txt", "r", encoding="utf-8") as file:
         val = line.split("\t")
         state_defs.append(val[0])
 
+#Read province/territory from file
+prov_defs = []
 if args.canada:
     with open("ve_provinces.txt", "r", encoding="utf-8") as file:
         while True:
@@ -112,8 +114,9 @@ if args.canada:
             if not line:
                 break
             val = line.split("\t")
-            state_defs.append(val[0])
+            prov_defs.append(val[0])
 
+#not part of WAS, but could be used for mapcharts
 if args.dc:
     state_defs.append("DC")
 
@@ -121,14 +124,20 @@ states_list = []
 needed_list = []
 qsocall_list = []
 was_list = []
+rac_list = []
 
 print(f"Reading {input_filename}")
 
 #read ADIF file into lists
 qsos_raw, adif_header = adif_io.read_from_file(input_filename)
 
-#look through qsos for those that match criteria
+# The QSOs are probably sorted by QSO time already, but make sure:
 for qso in qsos_raw:
+    qso["t"] = adif_io.time_on(qso)
+qsos_raw_sorted = sorted(qsos_raw, key = lambda qso: qso["t"])
+
+#look through qsos for those that match criteria
+for qso in qsos_raw_sorted:
 
     station_callsign = qso["STATION_CALLSIGN"].upper()
     if station_callsign not in qsocall_list:
@@ -156,10 +165,10 @@ for qso in qsos_raw:
         GRID_DIST = 0
 
     try:
-        #read only records that are with Japan DXCC = 339
+        #read only records that are with USA DXCC = 291, 110, or 6 
         #and conform to the specified band/mode/etc..
         if (qso["DXCC"] == '291' or qso["DXCC"] == '110' \
-            or qso["DXCC"] == '6' or qso["DXCC"] == '1'):
+            or qso["DXCC"] == '6'):
             if ((station_callsign in callsign_list) or len(callsign_list) == 0):
                 if (SAT in (SAT_NAME, '') or not SAT):
                     if ((PROP_MODE == "SAT" and args.satonly) \
@@ -170,16 +179,40 @@ for qso in qsos_raw:
                                 if qso["STATE"] not in states_list \
                                 and qso["STATE"] in state_defs:
                                     if GRID_DIST <= 80.0: 
-                                        d = datetime.datetime.strptime(qso['QSO_DATE'], '%Y%m%d')
+                                        d = adif_io.time_on(qso)
+                                        #d = datetime.datetime.strptime(qso['QSO_DATE'], '%Y%m%d')
                                         qso_band = qso['BAND']
                                         if PROP_MODE == "SAT":
                                             #qso_band = qso['SAT_NAME']+"("+qso_band+")"
                                             qso_band = qso['SAT_NAME']
                                         states_list.append(qso["STATE"])
 
-                                        was_list.append([qso['CALL'],\
-                                        datetime.date.strftime(d, "%Y/%m/%d"),\
-                                        qso_band,qso['MODE'],qso['STATE']])
+                                        was_list.append([qso['STATE'],
+                                        qso['CALL'],\
+                                        d.strftime("%m-%d-%Y"),
+                                        d.strftime("%H:%M:%S"),\
+                                        qso_band,qso['MODE']])
+        elif qso["DXCC"] == '1':
+            if ((station_callsign in callsign_list) or len(callsign_list) == 0):
+                if (SAT in (SAT_NAME, '') or not SAT):
+                    if ((PROP_MODE == "SAT" and args.satonly) \
+                    or (not args.satonly and not args.nosat) \
+                    or (not PROP_MODE and args.nosat)):
+                        if (MODE in (qso['MODE'], '') or not MODE):
+                            if (BAND in (qso['BAND'], '') or not BAND):
+                                if qso["STATE"] not in states_list \
+                                and qso["STATE"] in prov_defs:
+                                    d = adif_io.time_on(qso)
+                                    qso_band = qso['BAND']
+                                    if PROP_MODE == "SAT":
+                                        #qso_band = qso['SAT_NAME']+"("+qso_band+")"
+                                        qso_band = qso['SAT_NAME']
+                                    states_list.append(qso["STATE"])
+
+                                    rac_list.append([qso['STATE'],qso['CALL'],\
+                                    d.strftime("%Y-%m-%d"),
+                                    d.strftime("%H:%M:%S"),\
+                                    qso_band,qso['MODE'],"LoTW"])
 
     except KeyError as e:
         #key does not exist
@@ -198,9 +231,15 @@ states_list.sort()
 for state in state_defs:
     if state not in states_list:
         needed_list.append(state)
-print("States Confirmed:", len(states_list))
+print("States Confirmed:", len(was_list))
 
-print("States Needed:",len(state_defs)-len(states_list))
+for prov in prov_defs:
+    if prov not in states_list:
+        needed_list.append(prov)
+print("Provinces/Territories Confirmed:", len(rac_list))
+
+print("States/Provinces/Territories Needed:",len(state_defs)-len(was_list) + \
+len(prov_defs)-len(rac_list))
 for p in needed_list:
     print("   ",p,end="\n")
 
@@ -209,7 +248,7 @@ print()
 if len(states_list) > 0:
 
     print("Generating waslist.csv...")
-    was_list.sort(key=lambda x: x[4])
+    was_list.sort(key=lambda x: x[0])
 
     with open('waslist.csv', 'w', encoding="utf-8") as f:
         # using csv.writer method from CSV package
@@ -219,6 +258,17 @@ if len(states_list) > 0:
                                                 
     print("   Done.\n")      
 
+    print("Generating raclist.csv...")
+    #rac_list.sort(key=lambda x: x[2])
+    rac_list.sort(key=lambda i: prov_defs.index(i[0]))
+
+    with open('raclist.csv', 'w', encoding="utf-8") as f:
+        # using csv.writer method from CSV package
+        write = csv.writer(f)
+        for rac in rac_list:                  
+            write.writerow(rac)                
+                                                
+    print("   Done.\n")      
 
     print("Generating mapchart.net file...")
 
