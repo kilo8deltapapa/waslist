@@ -26,7 +26,8 @@ If the lotwreport.adi downloaded from LoTW contains non UTF-8 characters, use th
 
 >  iconv -f utf-8 -t utf-8 -c lotwreport.adi > log.adi
 
-Information about ARRL Worked All States Award can be found here: http://www.arrl.org/was
+- Information about ARRL Worked All States Award can be found here: http://www.arrl.org/
+- Information about the RAC Canadaward can be found here: https://www.rac.ca/operating/rac-operating-awards/
 
 ## Requirements
 
