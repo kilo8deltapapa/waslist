@@ -2,7 +2,7 @@ AB	Alberta
 BC	British Columbia
 MB	Manitoba
 NB	New Brunswick
-NL	Newfoundland and Labrador
+NL	Newfoundland and Labrador_
 NT	Northwest Territories
 NS	Nova Scotia
 NU	Nunavut
