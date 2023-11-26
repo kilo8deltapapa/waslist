@@ -23,7 +23,7 @@ Rick Murphy K1MU found at URL: https://www.rickmurphy.net/lotwquery.htm
 Author: Douglas C. Papay K8DP
 Date Created: November 23, 2023
 Date Modified: November 24, 2023
-Version: 1.0
+Version: 1.1
 Python Version: 3.10.5
 Dependencies: argparse,adif-io,pyhamtools
 License: MIT License
@@ -36,7 +36,43 @@ import argparse
 import adif_io
 from pyhamtools.locator import calculate_distance
 
-VERSION = 1.0
+VERSION = 1.1
+
+def make_mapfile(all_list,need_list,filename):
+    with open(filename, "w", encoding="utf-8") as f:
+        print('{"groups":{"#e0f3db":{"label":"Confirmed LoTW","paths":[', end="", file=f)
+
+        for i,p in enumerate(all_list):
+            if i < len(all_list) - 1:
+                print('"' + p + '"',end=",", file=f)
+            else:
+                print('"' + p + '"',end="", file=f)
+
+        print(']},"#ffff33":{"label":"Needed","paths":[',end="", file=f)
+
+        for i,p in enumerate(need_list):
+            if i < len(need_list) - 1:
+                print('"' + p + '"',end=",", file=f)
+            else:
+                print('"' + p + '"', file=f)
+   #     if callsign != "":
+   #         callsign = callsign + ' - '
+        print(']}},"title":"'+ ', '.join(callsign_list) +' ",\
+        "hidden":[],"background":"#fff","borders":"#000",\
+        "legendFont":"Helvetica","legendFontColor":"#000",\
+        "legendBgColor":"#00000000","legendWidth":150,"areBordersShown":true,\
+        "defaultColor":"#d1dbdd","labelsColor":"#000000",\
+        "strokeWidth":"medium","areLabelsShown":true,\
+        "legendPosition":"bottom_left","legendSize":"medium",\
+        "legendStatus":"show","scalingPatterns":true,\
+        "legendRowsSameColor":true,"legendColumnCount":2}', file=f)
+
+def lookup_name(abbreviation_list):
+    name_list = []
+    #print(abbreviation_list)
+    for a in abbreviation_list:
+        name_list.append(prov_names[prov_defs.index(a)].replace(" ", "_"))
+    return name_list
 
 # Initialize parser
 parser = argparse.ArgumentParser()
@@ -107,6 +143,7 @@ with open("usa_states.txt", "r", encoding="utf-8") as file:
 
 #Read province/territory from file
 prov_defs = []
+prov_names = []
 if args.canada:
     with open("ve_provinces.txt", "r", encoding="utf-8") as file:
         while True:
@@ -115,13 +152,16 @@ if args.canada:
                 break
             val = line.split("\t")
             prov_defs.append(val[0])
+            prov_names.append(val[1])
 
 #not part of WAS, but could be used for mapcharts
 if args.dc:
     state_defs.append("DC")
 
 states_list = []
-needed_list = []
+provs_list = []
+was_needed_list = []
+rac_needed_list = []
 qsocall_list = []
 was_list = []
 rac_list = []
@@ -200,14 +240,15 @@ for qso in qsos_raw_sorted:
                     or (not PROP_MODE and args.nosat)):
                         if (MODE in (qso['MODE'], '') or not MODE):
                             if (BAND in (qso['BAND'], '') or not BAND):
-                                if qso["STATE"] not in states_list \
+                                if qso["STATE"] not in provs_list \
                                 and qso["STATE"] in prov_defs:
                                     d = adif_io.time_on(qso)
                                     qso_band = qso['BAND']
                                     if PROP_MODE == "SAT":
                                         #qso_band = qso['SAT_NAME']+"("+qso_band+")"
                                         qso_band = qso['SAT_NAME']
-                                    states_list.append(qso["STATE"])
+#                                    states_list.append(qso["STATE"])
+                                    provs_list.append(qso["STATE"])
 
                                     rac_list.append([qso['STATE'],qso['CALL'],\
                                     d.strftime("%Y-%m-%d"),
@@ -223,27 +264,32 @@ print("   Done.\n")
 print(f"Callsigns found in ADIF: {len(qsocall_list)}")
 for c in qsocall_list:
     print("   ",c)
+print()
+
 print("Records in ADIF:", len(qsos_raw))
+print()
 
 #sort the state list
 states_list.sort()
 
 for state in state_defs:
     if state not in states_list:
-        needed_list.append(state)
+        was_needed_list.append(state)
 print("States Confirmed:", len(was_list))
-
-for prov in prov_defs:
-    if prov not in states_list:
-        needed_list.append(prov)
-print("Provinces/Territories Confirmed:", len(rac_list))
-
-print("States/Provinces/Territories Needed:",len(state_defs)-len(was_list) + \
-len(prov_defs)-len(rac_list))
-for p in needed_list:
+print("States Needed:",len(state_defs)-len(was_list))
+for p in was_needed_list:
     print("   ",p,end="\n")
-
 print()
+
+if args.canada:
+    for prov in prov_defs:
+        if prov not in provs_list:
+            rac_needed_list.append(prov)
+    print("Provinces/Territories Confirmed:", len(provs_list))
+    print("Provinces/Territories Needed:",len(prov_defs)-len(rac_list))
+    for p in rac_needed_list:
+        print("   ",p,end="\n")
+    print()
 
 if len(states_list) > 0:
 
@@ -270,43 +316,20 @@ if len(states_list) > 0:
                                                 
     print("   Done.\n")      
 
-    print("Generating mapchart.net file...")
+    print("Generating mapchart.net file(s)...")
 
-    if not args.canada:
-        MAP_FILENAME = "mapchartSave-usa.txt"
-    else:
+    MAP_FILENAME = "mapchartSave-usa.txt"
+    make_mapfile(states_list,was_needed_list,MAP_FILENAME)
+
+    if args.canada:
+        MAP_FILENAME = "mapchartSave-canada.txt"
+        make_mapfile(lookup_name(provs_list),lookup_name(rac_needed_list),MAP_FILENAME)
         MAP_FILENAME = "mapchartSave-usa_canada.txt"
+        make_mapfile(states_list+provs_list,was_needed_list+rac_needed_list,MAP_FILENAME)
 
-    with open(MAP_FILENAME, "w", encoding="utf-8") as f:
-        print('{"groups":{"#e0f3db":{"label":"Confirmed LoTW","paths":[', end="", file=f)
-
-        for i,p in enumerate(states_list):
-            if i < len(states_list) - 1:
-                print('"' + p + '"',end=",", file=f)
-            else:
-                print('"' + p + '"',end="", file=f)
-
-        print(']},"#ffff33":{"label":"Needed","paths":[',end="", file=f)
-
-        for i,p in enumerate(needed_list):
-            if i < len(needed_list) - 1:
-                print('"' + p + '"',end=",", file=f)
-            else:
-                print('"' + p + '"', file=f)
-   #     if callsign != "":
-   #         callsign = callsign + ' - '
-        print(']}},"title":"'+ ', '.join(callsign_list) +' Worked All States",\
-        "hidden":[],"background":"#fff","borders":"#000",\
-        "legendFont":"Helvetica","legendFontColor":"#000",\
-        "legendBgColor":"#00000000","legendWidth":150,"areBordersShown":true,\
-        "defaultColor":"#d1dbdd","labelsColor":"#6a0707",\
-        "strokeWidth":"medium","areLabelsShown":true,\
-        "legendPosition":"bottom_left","legendSize":"medium",\
-        "legendStatus":"show","scalingPatterns":true,\
-        "legendRowsSameColor":true,"legendColumnCount":2}', file=f)
 
     print("   Done.\n")
     print("File", MAP_FILENAME, "can be uploaded \
-to https://www.mapchart.net/usa.html for map display.\n")
+to https://www.mapchart.net/ for map display.\n")
 else:
     print("No states confirmed, mapchart.net file was not created!")
